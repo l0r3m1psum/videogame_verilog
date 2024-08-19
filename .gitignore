@@ -2,3 +2,6 @@
 *.json
 *.bit
 *.config
+*.vcd
+*.vvp
+.DS_store

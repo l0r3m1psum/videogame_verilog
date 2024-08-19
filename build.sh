@@ -2,9 +2,9 @@
 
 set -e
 
-f=myblinky
+f=ulxs3_game
 
-yosys -p "synth_ecp5 -json ${f}.json" ${f}.v
+yosys -p "synth_ecp5 -top top -json ${f}.json" ${f}.v
 nextpnr-ecp5 --85k \
 	--json ${f}.json \
 	--lpf ulx3s_v20.lpf \
