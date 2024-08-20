@@ -2,7 +2,7 @@
 
 set -e
 
-t=digits10_top
+t=bouncing_ball_top
 f=ulx3s_game
 
 yosys -p "synth_ecp5 -top $t -json ${f}.json" ${f}.v

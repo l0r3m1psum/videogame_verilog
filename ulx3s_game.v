@@ -558,3 +558,69 @@ module digits10_top(
 		.TMDS_clock(gpdi_dp[3])
 	);
 endmodule
+
+module ff_sync(input clk, input in, output out);
+	reg [1:0] ff = 0;
+	always @(posedge clk) ff = {ff[1], in};
+	assign out = ff[1];
+endmodule
+
+module sampler(input clk, input in, output out);
+	reg [2:0] buffer = 0;
+	always @(posedge clk) buffer = {buffer[1:0], in};
+	assign out = buffer[2:1] == 2'b01;
+endmodule
+
+module bouncing_ball_top(
+	input clk_25mhz,
+	output [3:0] gpdi_dp,
+	output wifi_gpio0
+);
+	// Tie GPIO0, keep board from rebooting
+	assign wifi_gpio0 = 1'b1;
+
+	wire hsync, vsync, display_on;
+	wire [9:0] hpos, vpos;
+	hvsync_generator_hdmi hvsync_gen(clk_25mhz, 1'b0, hsync, vsync, display_on, hpos, vpos);
+
+	localparam ball_horiz_initial = 128;
+	localparam ball_vert_initial = 128;
+	localparam BALL_SIZE = 4;
+
+	reg [9:0] ball_hpos = ball_horiz_initial, ball_vpos = ball_vert_initial;
+	reg [9:0] ball_hvel = -2, ball_vvel = 2;
+
+	always @(posedge vsync) begin
+		ball_hpos <= ball_hpos + ball_hvel;
+		ball_vpos <= ball_vpos + ball_vvel;
+	end
+
+	wire ball_vert_collide  = ball_vpos >= 480 - BALL_SIZE;
+	wire ball_horiz_collide = ball_hpos >= 640 - BALL_SIZE;
+	always @(posedge ball_vert_collide)  ball_vvel <= -ball_vvel;
+	always @(posedge ball_horiz_collide) ball_hvel <= -ball_hvel;
+
+	// offset of ball position from video beam
+	wire [9:0] ball_hdiff = hpos - ball_hpos;
+	wire [9:0] ball_vdiff = vpos - ball_vpos;
+
+	wire ball_hgfx = ball_hdiff < BALL_SIZE;
+	wire ball_vgfx = ball_vdiff < BALL_SIZE;
+	wire ball_gfx  = ball_hgfx && ball_vgfx;
+
+	wire grid_gfx = (((hpos&7)==0) && ((vpos&7)==0));
+	wire r = display_on && (ball_hgfx | ball_gfx);
+	wire g = display_on && (grid_gfx  | ball_gfx);
+	wire b = display_on && (ball_vgfx | ball_gfx);
+	wire [2:0] rgb = {b,g,r};
+
+	hdmi out(
+		.pixclk(clk_25mhz),
+		.hSync(hsync),
+		.vSync(vsync),
+		.DrawArea(display_on),
+		.rgb(rgb),
+		.TMDS(gpdi_dp[2:0]),
+		.TMDS_clock(gpdi_dp[3])
+	);
+endmodule
