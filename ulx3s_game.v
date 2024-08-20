@@ -338,7 +338,15 @@ module hdmi(
 
 	wire clk_TMDS;  // 25MHz x 10 = 250MHz
 	wire [3:0] clocks;
-	ecp5pll #(.in_hz(25000000), .out0_hz(250000000)) ecp5pll_inst(.clk_i(pixclk), .clk_o(clocks));
+	wire locked;
+	ecp5pll #(.in_hz(25000000), .out0_hz(250000000))
+	ecp5pll_inst(.clk_i(pixclk), .clk_o(clocks),
+	.reset(1'b0),
+	.standby(1'b0),
+	.phasesel(2'b00),
+	.phasedir(1'b0), .phasestep(1'b0), .phaseloadreg(1'b0),
+	.locked(locked)
+	);
 	assign clk_TMDS = clocks[0];
 
 	reg [9:0] TMDS_shift_red=0, TMDS_shift_green=0, TMDS_shift_blue=0;
@@ -358,6 +366,35 @@ module hdmi(
 	assign TMDS_clock = pixclk;
 endmodule
 
+module test_pattern_top(
+	input clk_25mhz,
+	output [3:0] gpdi_dp,
+	output wifi_gpio0
+);
+
+	// Tie GPIO0, keep board from rebooting
+	assign wifi_gpio0 = 1'b1;
+
+	wire hsync, vsync, display_on;
+	wire [9:0] hpos, vpos;
+	hvsync_generator_hdmi hvsync_gen(clk_25mhz, 1'b0, hsync, vsync, display_on, hpos, vpos);
+
+	wire r = display_on & (((hpos&7)==0) | ((vpos&7)==0));
+	wire g = display_on & vpos[4];
+	wire b = display_on & hpos[4];
+	wire [2:0] rgb = {b,g,r};
+
+	hdmi out(
+		.pixclk(clk_25mhz),
+		.hSync(hsync),
+		.vSync(vsync),
+		.DrawArea(display_on),
+		.rgb(rgb),
+		.TMDS(gpdi_dp[2:0]),
+		.TMDS_clock(gpdi_dp[3])
+	);
+endmodule
+
 // Divides the input clock signal by 2^i where i=1..N
 module divider
 	#(parameter N = 16)
@@ -367,6 +404,21 @@ module divider
 		if (rst) out <= 0;
 		else out <= out + 1;
 	end
+endmodule
+
+module divider_top(
+	input clk_25mhz,
+	output [7:0] led,
+	output [3:0] gpdi_dp,
+	output wifi_gpio0
+);
+	// Tie GPIO0, keep board from rebooting
+	assign wifi_gpio0 = 1'b1;
+
+	localparam N = 28;
+	wire [N-1:0] clk_div;
+	divider #(N) div(.clk(clk_25mhz), .rst(btn[1]), .out(clk_div));
+	assign led = clk_div[N-1:N-1-8];
 endmodule
 
 module digits10(
@@ -437,7 +489,7 @@ module digits10(
 			7'o112: bits = 5'b11111;
 			7'o113: bits = 5'b00001;
 			7'o114: bits = 5'b11111;
-
+			// 7'o115-7'o177 = 0
 			default: bits = 0;
 	endcase
 endmodule
@@ -471,10 +523,8 @@ module digits_tb;
 	end
 endmodule
 
-module top(
+module digits10_top(
 	input clk_25mhz,
-	input [6:0] btn,
-	output [7:0] led,
 	output [3:0] gpdi_dp,
 	output wifi_gpio0
 );
@@ -482,21 +532,10 @@ module top(
 	// Tie GPIO0, keep board from rebooting
 	assign wifi_gpio0 = 1'b1;
 
-	localparam N = 28;
-	wire [N-1:0] clk_div;
-	divider #(N) div(.clk(clk_25mhz), .rst(btn[1]), .out(clk_div));
-	assign led = clk_div[N-1:N-1-8];
-
 	wire hsync, vsync, display_on;
 	wire [9:0] hpos, vpos;
-	hvsync_generator_hdmi hvsync_gen(clk_25mhz, 0, hsync, vsync, display_on, hpos, vpos);
-	
-`ifdef Z
-	wire r = display_on & (((hpos&7)==0) | ((vpos&7)==0));
-	wire g = display_on & vpos[4];
-	wire b = display_on & hpos[4];
-	wire [2:0] rgb = {b,g,r};
-`endif
+	hvsync_generator_hdmi hvsync_gen(clk_25mhz, 1'b0, hsync, vsync, display_on, hpos, vpos);
+
 	wire [3:0] digit = hpos[7:4];
 	wire [2:0] xofs = hpos[3:1];
 	wire [2:0] yofs = vpos[3:1];
