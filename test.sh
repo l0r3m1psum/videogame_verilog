@@ -2,10 +2,10 @@
 
 set -e
 
-top=digits_tb
+top=player_stats_tb
 
 iverilog -g2005 -gstrict-expr-width -Wall \
 	-s $top \
-	-o ulxs3_game.vvp ulxs3_game.v
+	-o ulxs3_game.vvp ulx3s_game.v
 vvp ulxs3_game.vvp
-# gtkwave ${top}.vcd
+gtkwave ${top}.vcd
