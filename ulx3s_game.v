@@ -4,19 +4,24 @@ module hvsync_generator_hdmi(
 	output hSync, vSync, DrawArea,
 	output reg [9:0] CounterX, CounterY
 );
+	initial begin
+		CounterX = 0;
+		CounterY = 0;
+	end
+
 	always @(posedge pixclk) begin
 		if (rst) begin
 			CounterX <= 0;
 			CounterY <= 0;
 		end else begin
-			CounterX <= (CounterX==799) ? 0 : CounterX+1;
-			if(CounterX==799) CounterY <= (CounterY==524) ? 0 : CounterY+1;
+			CounterX <= CounterX == 799 ? 0 : CounterX + 1;
+			if (CounterX == 799) CounterY <= CounterY == 524 ? 0 : CounterY + 1;
 		end
 	end
-	
-	assign hSync = (CounterX>=656) && (CounterX<752);
-	assign vSync = (CounterY>=490) && (CounterY<492);
-	assign DrawArea = (CounterX<640) && (CounterY<480);
+
+	assign hSync = 656 <= CounterX && CounterX < 752;
+	assign vSync = 490 <= CounterY && CounterY < 492;
+	assign DrawArea = CounterX < 640 && CounterY < 480;
 endmodule
 
 module hvsync_tb;
@@ -337,17 +342,28 @@ module hdmi(
 	// clock cycle we emit the 10 bit necessary to draw a pixel.
 
 	wire clk_TMDS;  // 25MHz x 10 = 250MHz
+`ifdef SYNTHESIS
 	wire [3:0] clocks;
 	wire locked;
 	ecp5pll #(.in_hz(25000000), .out0_hz(250000000))
 	ecp5pll_inst(.clk_i(pixclk), .clk_o(clocks),
-	.reset(1'b0),
-	.standby(1'b0),
-	.phasesel(2'b00),
-	.phasedir(1'b0), .phasestep(1'b0), .phaseloadreg(1'b0),
-	.locked(locked)
+		.reset(1'b0),
+		.standby(1'b0),
+		.phasesel(2'b00),
+		.phasedir(1'b0), .phasestep(1'b0), .phaseloadreg(1'b0),
+		.locked(locked)
 	);
 	assign clk_TMDS = clocks[0];
+`else
+	// https://www.chipverify.com/verilog/verilog-clock-generator
+	// assiming 1 clock cycle is 10 units of time
+	reg simulated_pll = 0;
+	always begin
+		#1 simulated_pll = 0;
+		#1 simulated_pll = 1;
+	end
+	assign clk_TMDS = simulated_pll;
+`endif
 
 	reg [9:0] TMDS_shift_red=0, TMDS_shift_green=0, TMDS_shift_blue=0;
 	reg [3:0] TMDS_mod10=0;  // modulus 10 counter
@@ -768,6 +784,9 @@ module ball_paddle_top(
 
 	wire [5:0] hcell = hpos[8:3];           // horizontal brick index
 	wire [5:0] vcell = vpos[8:3];           // vertical brick index
+	// 256x240
+	// 9'd255 == 9'b011111111
+	//              ++++++
 	wire lr_border = hcell==0 || hcell==31; // along horizontal border?
 
 	// TODO: unsigned compare doesn't work in JS
@@ -837,9 +856,9 @@ module ball_paddle_top(
 				if (paddle_gfx) ball_collide_paddle <= 1;
 				// ball has 4 collision quadrants
 				if (!ball_rel_x[2] & !ball_rel_y[2]) ball_collide_bits[0] <= 1;
-				if (ball_rel_x[2] & !ball_rel_y[2]) ball_collide_bits[1] <= 1;
-				if (!ball_rel_x[2] & ball_rel_y[2]) ball_collide_bits[2] <= 1;
-				if (ball_rel_x[2] & ball_rel_y[2]) ball_collide_bits[3] <= 1;
+				if ( ball_rel_x[2] & !ball_rel_y[2]) ball_collide_bits[1] <= 1;
+				if (!ball_rel_x[2] &  ball_rel_y[2]) ball_collide_bits[2] <= 1;
+				if ( ball_rel_x[2] &  ball_rel_y[2]) ball_collide_bits[3] <= 1;
 			end
 		end
 
@@ -936,3 +955,83 @@ module ball_paddle_top(
 		.TMDS_clock(gpdi_dp[3])
 	);
 endmodule
+
+module my_ball_paddle_top(
+	input clk_25mhz,
+	input [6:0] btn,
+	output [3:0] gpdi_dp,
+	output wifi_gpio0
+);
+	// Tie GPIO0, keep board from rebooting
+	assign wifi_gpio0 = 1'b1;
+
+	wire reset = ~btn[0];
+
+	wire hsync, vsync, display_on;
+	wire [9:0] hpos, vpos;
+	hvsync_generator_hdmi hvsync_gen(clk_25mhz, reset, hsync, vsync, display_on, hpos, vpos);
+
+	reg [3:0] hpos_mod10 = 0, vpos_mod10 = 0;
+	reg hsync_sampled = 0;
+	always @(posedge clk_25mhz) begin
+		if (vsync) begin
+			hpos_mod10 <= 0;
+			vpos_mod10 <= 0;
+		end else if (hsync) begin
+			hpos_mod10 <= 0;
+			if (~hsync_sampled) begin
+				vpos_mod10 <= vpos_mod10 == 9 ? 0 : vpos_mod10 + 1;
+				hsync_sampled <= 1;
+			end
+		end else if (display_on) begin
+			hpos_mod10 <= hpos_mod10 == 9 ? 0 : hpos_mod10 + 1;
+			hsync_sampled <= 0;
+		end
+	end
+
+	// wire [3:0] hcell = hpos_mod10, vcell = vpos_mod10;
+	// wire lr_border = hcell == 0 || hcell == 63;
+
+	wire grid_gfx = hpos_mod10 == 0 || vpos_mod10 == 0;
+	wire [2:0] rgb = {
+		grid_gfx, // blue
+		1'b0, // green
+		1'b0     // red
+	};
+
+	hdmi out(
+		.pixclk(clk_25mhz),
+		.hSync(hsync),
+		.vSync(vsync),
+		.DrawArea(display_on),
+		.rgb(rgb),
+		.TMDS(gpdi_dp[2:0]),
+		.TMDS_clock(gpdi_dp[3])
+	);
+endmodule
+
+`ifndef SYNTHESIS
+module my_ball_paddle_top_tb;
+	reg clk = 0, rst = 0;
+	always #10 clk = ~clk;
+
+	wire [3:0] gpdi_dp;
+	wire ignore;
+	my_ball_paddle_top dut(
+		.clk_25mhz(clk),
+		.btn({6'b000000, ~rst}),
+		.gpdi_dp(gpdi_dp),
+		.wifi_gpio0(ignore)
+	);
+
+	initial begin
+		$dumpfile("my_ball_paddle_top_tb.vcd");
+		$dumpvars;
+		rst = 1;
+		@(posedge clk);
+		rst = 0;
+		repeat(800*525) @(posedge clk);
+		$finish();
+	end
+endmodule
+`endif

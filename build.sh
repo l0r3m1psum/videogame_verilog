@@ -2,7 +2,7 @@
 
 set -e
 
-t=ball_paddle_top
+t=my_ball_paddle_top
 f=ulx3s_game
 
 yosys -p "synth_ecp5 -top $t -json ${f}.json" ${f}.v

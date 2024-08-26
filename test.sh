@@ -2,10 +2,14 @@
 
 set -e
 
-top=player_stats_tb
+top=my_ball_paddle_top_tb
+f=ulx3s_game
 
 iverilog -g2005 -gstrict-expr-width -Wall \
 	-s $top \
-	-o ulxs3_game.vvp ulx3s_game.v
-vvp ulxs3_game.vvp
-gtkwave ${top}.vcd
+	-o ${f}.vvp ${f}.v
+vvp ${f}.vvp
+if [ "$1" != "only" ]
+then
+	gtkwave ${top}.vcd
+fi
