@@ -719,8 +719,10 @@ module scoreboard_generator(
 	assign board_gfx = xofs >= 3'b011 && score_bits[xofs ^ 3'b111];
 endmodule
 
-// TODO: aggiustare dimensioni della grafica per far si che usino bene lo schermo.
-// TODO: usare i numeri in virgola fissa per rendere il movimento del cosetto accettabile.
+// TODO: aggiustare dimensioni della grafica per far si che usino bene lo
+// schermo.
+// TODO: usare i numeri in virgola fissa per rendere il movimento del cosetto
+// accettabile.
 module ball_paddle_top(
 	input clk_25mhz,
 	input [6:0] btn,
@@ -971,33 +973,44 @@ module my_ball_paddle_top(
 	wire [9:0] hpos, vpos;
 	hvsync_generator_hdmi hvsync_gen(clk_25mhz, reset, hsync, vsync, display_on, hpos, vpos);
 
+	reg [5:0] hpos_div10 = 0, vpos_div10 = 0;
 	reg [3:0] hpos_mod10 = 0, vpos_mod10 = 0;
-	reg hsync_sampled = 0;
+	reg should_sample_on_hsync = 0;
 	always @(posedge clk_25mhz) begin
 		if (vsync) begin
-			hpos_mod10 <= 0;
-			vpos_mod10 <= 0;
+			hpos_mod10 <= 0; hpos_div10 <= 0;
+			vpos_mod10 <= 0; vpos_div10 <= 0;
 		end else if (hsync) begin
 			hpos_mod10 <= 0;
-			if (~hsync_sampled) begin
-				vpos_mod10 <= vpos_mod10 == 9 ? 0 : vpos_mod10 + 1;
-				hsync_sampled <= 1;
+			if (should_sample_on_hsync) begin
+				if (vpos_mod10 == 9) begin
+					vpos_mod10 <= 0;
+					vpos_div10 <= vpos_div10 + 1;
+				end else
+					vpos_mod10 <= vpos_mod10 + 1;
+				// vpos_mod10 <= vpos_mod10 == 9 ? 0 : vpos_mod10 + 1;
+				should_sample_on_hsync <= 0;
 			end
 		end else if (display_on) begin
-			hpos_mod10 <= hpos_mod10 == 9 ? 0 : hpos_mod10 + 1;
-			hsync_sampled <= 0;
+			if (hpos_mod10 == 9) begin
+				hpos_mod10 <= 0;
+				hpos_div10 <= hpos_div10 + 1;
+			end else
+				hpos_mod10 <= hpos_mod10 + 1;
+			// hpos_mod10 <= hpos_mod10 == 9 ? 0 : hpos_mod10 + 1;
+			should_sample_on_hsync <= 1;
 		end
 	end
 
-	// wire [3:0] hcell = hpos_mod10, vcell = vpos_mod10;
-	// wire lr_border = hcell == 0 || hcell == 63;
+	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
+	wire lr_border = hcell == 0 || hcell == 63;
 
 	wire grid_gfx = hpos_mod10 == 0 || vpos_mod10 == 0;
-	wire [2:0] rgb = {
-		grid_gfx, // blue
-		1'b0, // green
-		1'b0     // red
-	};
+
+	wire r = 0;
+	wire g = lr_border;
+	wire b = grid_gfx;
+	wire [2:0] rgb = {b,g,r};
 
 	hdmi out(
 		.pixclk(clk_25mhz),
