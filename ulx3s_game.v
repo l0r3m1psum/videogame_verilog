@@ -930,7 +930,7 @@ module ball_paddle_top(
 	end
 
 	always @(*) begin
-		case (vpos[8:3])
+		case (vcell)
 			0,1,2: main_gfx = score_gfx; // scoreboard
 			3: main_gfx = 0;
 			4: main_gfx = 1; // top border
@@ -1007,8 +1007,23 @@ module my_ball_paddle_top(
 
 	wire grid_gfx = hpos_mod10 == 0 || vpos_mod10 == 0;
 
+	reg main_gfx = 0;
+	always @(*) begin
+		case (vcell)
+			0,1,2: main_gfx = 0;
+			3: main_gfx = 0;
+			4: main_gfx = 1; // top border
+			// 5,6,7:
+			8,9,10,11,12,13,14,15: main_gfx = 0 | lr_border; // brick rows 1-8
+			// 16,17,18,19,20,21,22,23,24,25,26,27
+			28: main_gfx = 0 | lr_border;
+			47: main_gfx = hpos[0] ^ vpos[0]; // bottom border
+			default: main_gfx = lr_border; // left/right borders
+		endcase
+	end
+
 	wire r = 0;
-	wire g = vpos_div10 == 47 ? hpos[0] ^ vpos[0] : lr_border;
+	wire g = main_gfx;
 	wire b = grid_gfx;
 	wire [2:0] rgb = {b,g,r};
 
