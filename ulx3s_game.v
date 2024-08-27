@@ -1008,7 +1008,7 @@ module my_ball_paddle_top(
 	wire grid_gfx = hpos_mod10 == 0 || vpos_mod10 == 0;
 
 	wire r = 0;
-	wire g = lr_border;
+	wire g = vpos_div10 == 47 ? hpos[0] ^ vpos[0] : lr_border;
 	wire b = grid_gfx;
 	wire [2:0] rgb = {b,g,r};
 
