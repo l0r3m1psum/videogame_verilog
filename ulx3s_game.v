@@ -804,7 +804,7 @@ module ball_paddle_top(
 	// ball graphics signal
 	wire ball_gfx = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
 
-	reg main_gfx;          // main graphics signal (bricks and borders)
+	reg static_collidable_gfx;    // main graphics signal (bricks and borders)
 	reg brick_present;     // 1 when we are drawing a brick
 	reg [6:0] brick_index; // index into array of current brick
 	// brick graphics signal
@@ -841,7 +841,7 @@ module ball_paddle_top(
 		else if (btn[6]) paddle_pos <= paddle_pos + 1;
 
 	// 1 when ball signal intersects main (brick + border) signal
-	wire ball_pixel_collide = main_gfx & ball_gfx;
+	wire ball_static_pixel_collide = static_collidable_gfx & ball_gfx;
 
 	reg ball_collide_paddle = 0;
 	reg [3:0] ball_collide_bits = 0;
@@ -853,7 +853,7 @@ module ball_paddle_top(
 			ball_collide_bits <= 0;
 			ball_collide_paddle <= 0;
 		end else begin
-			if (ball_pixel_collide) begin
+			if (ball_static_pixel_collide) begin
 				// did we collide w/ paddle?
 				if (paddle_gfx) ball_collide_paddle <= 1;
 				// ball has 4 collision quadrants
@@ -866,7 +866,7 @@ module ball_paddle_top(
 
 	// compute ball collisions with brick and increment score
 	always @(posedge clk_25mhz)
-		if (ball_pixel_collide && brick_present) begin
+		if (ball_static_pixel_collide && brick_present) begin
 			brick_array[brick_index] <= 1;
 			incscore <= 1; // increment score
 		end else begin
@@ -886,12 +886,12 @@ module ball_paddle_top(
 			// which side of paddle, left/right?
 			ball_dir_x <= (ball_paddle_dx < 20) ? BALL_DIR_LEFT : BALL_DIR_RIGHT;
 			// hitting with edge of paddle makes it fast
-			ball_speed_x <= ball_collide_bits[3:0] != 4'b1100;
+			ball_speed_x <= ball_collide_bits != 4'b1100;
 		end else begin
 			// collided with playfield
 			// TODO: can still slip through corners
 			// compute left/right bounce
-			casez (ball_collide_bits[3:0])
+			casez (ball_collide_bits)
 				4'b01?1: ball_dir_x <= BALL_DIR_RIGHT; // left edge/corner
 				4'b1101: ball_dir_x <= BALL_DIR_RIGHT; // left corner
 				4'b101?: ball_dir_x <= BALL_DIR_LEFT;  // right edge/corner
@@ -899,7 +899,7 @@ module ball_paddle_top(
 				default: ;
 			endcase
 			// compute top/bottom bounce
-			casez (ball_collide_bits[3:0])
+			casez (ball_collide_bits)
 				4'b1011: ball_dir_y <= BALL_DIR_DOWN;
 				4'b0111: ball_dir_y <= BALL_DIR_DOWN;
 				4'b001?: ball_dir_y <= BALL_DIR_DOWN;
@@ -931,19 +931,19 @@ module ball_paddle_top(
 
 	always @(*) begin
 		case (vcell)
-			0,1,2: main_gfx = score_gfx; // scoreboard
-			3: main_gfx = 0;
-			4: main_gfx = 1; // top border
-			8,9,10,11,12,13,14,15: main_gfx = brick_gfx; // brick rows 1-8
-			28: main_gfx = paddle_gfx | lr_border; // paddle
-			29: main_gfx = hpos[0] ^ vpos[0]; // bottom border
-			default: main_gfx = lr_border; // left/right borders
+			0,1,2: static_collidable_gfx = score_gfx; // scoreboard
+			3: static_collidable_gfx = 0;
+			4: static_collidable_gfx = 1; // top border
+			8,9,10,11,12,13,14,15: static_collidable_gfx = brick_gfx; // brick rows 1-8
+			28: static_collidable_gfx = paddle_gfx | lr_border; // paddle
+			29: static_collidable_gfx = hpos[0] ^ vpos[0]; // bottom border
+			default: static_collidable_gfx = lr_border; // left/right borders
 		endcase
 	end
 
 	wire grid_gfx = (((hpos&7)==0) || ((vpos&7)==0));
 	wire r = display_on && (ball_gfx | paddle_gfx);
-	wire g = display_on && (main_gfx | ball_gfx);
+	wire g = display_on && (static_collidable_gfx | ball_gfx);
 	wire b = display_on && (grid_gfx | ball_gfx | brick_present);
 	wire [2:0] rgb = {b,g,r};
 
@@ -1004,26 +1004,37 @@ module my_ball_paddle_top(
 
 	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
 	wire lr_border = hcell == 0 || hcell == 63;
-
 	wire grid_gfx = hpos_mod10 == 0 || vpos_mod10 == 0;
 
-	reg main_gfx = 0;
+	reg [9:0] ball_x = 640/2; // ball X position
+	reg [9:0] ball_y = 480/2; // ball Y position
+
+	// When the delta is negative since it is a 2's complement number it is just
+	// interpreted as a big number.
+	wire [9:0] ball_rel_x = (hpos - ball_x);
+	wire [9:0] ball_rel_y = (vpos - ball_y);
+
+	wire ball_gfx = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
+
+	wire ball_static_pixel_collide = static_collidable_gfx & ball_gfx;
+
+	reg static_collidable_gfx = 0;
 	always @(*) begin
 		case (vcell)
-			0,1,2: main_gfx = 0;
-			3: main_gfx = 0;
-			4: main_gfx = 1; // top border
+			0,1,2: static_collidable_gfx = 0;
+			3: static_collidable_gfx = 0;
+			4: static_collidable_gfx = 1; // top border
 			// 5,6,7:
-			8,9,10,11,12,13,14,15: main_gfx = 0 | lr_border; // brick rows 1-8
+			8,9,10,11,12,13,14,15: static_collidable_gfx = 0 | lr_border; // brick rows 1-8
 			// 16,17,18,19,20,21,22,23,24,25,26,27
-			28: main_gfx = 0 | lr_border;
-			47: main_gfx = hpos[0] ^ vpos[0]; // bottom border
-			default: main_gfx = lr_border; // left/right borders
+			28: static_collidable_gfx = 0 | lr_border;
+			47: static_collidable_gfx = hpos[0] ^ vpos[0]; // bottom border
+			default: static_collidable_gfx = lr_border; // left/right borders
 		endcase
 	end
 
-	wire r = 0;
-	wire g = main_gfx;
+	wire r = ball_gfx;
+	wire g = static_collidable_gfx;
 	wire b = grid_gfx;
 	wire [2:0] rgb = {b,g,r};
 
