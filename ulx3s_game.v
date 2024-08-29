@@ -792,7 +792,7 @@ module ball_paddle_top(
 	wire lr_border = hcell==0 || hcell==31; // along horizontal border?
 
 	// TODO: unsigned compare doesn't work in JS
-	wire [8:0] paddle_rel_x = ((hpos-paddle_pos) & 9'h1ff);
+	wire [9:0] paddle_rel_x = ((hpos-paddle_pos) & 9'h1ff);
 
 	// player paddle graphics signal
 	wire paddle_gfx = (vcell == 28) && (paddle_rel_x < PADDLE_WIDTH);
@@ -827,7 +827,6 @@ module ball_paddle_top(
 		end else begin
 			brick_present <= 0;
 		end
-
 
 	// only works when paddle at bottom of screen!
 	// (we don't want to mess w/ paddle position during visible portion)
@@ -1001,21 +1000,27 @@ module my_ball_paddle_top(
 			should_sample_on_hsync <= 1;
 		end
 	end
+
 	localparam BALL_SIZE = 6;
+	localparam PADDLE_WIDTH = 31;
 
 	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
+
 	wire lr_border = hcell == 0 || hcell == 63;
 	wire grid_gfx = hpos_mod10 == 0 || vpos_mod10 == 0;
 
-	reg [9:0] ball_x = 640/2; // ball X position
-	reg [9:0] ball_y = 480/2; // ball Y position
+	reg [9:0] ball_x   = 640/2;
+	reg [9:0] ball_y   = 480/2;
+	reg [9:0] paddle_x = 640/2;
 
 	// When the delta is negative since it is a 2's complement number it is just
 	// interpreted as a big number.
-	wire [9:0] ball_rel_x = (hpos - ball_x);
-	wire [9:0] ball_rel_y = (vpos - ball_y);
+	wire [9:0] ball_rel_x   = hpos - ball_x;
+	wire [9:0] ball_rel_y   = vpos - ball_y;
+	wire [9:0] paddle_rel_x = hpos - paddle_x;
 
-	wire ball_gfx = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
+	wire ball_gfx   = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
+	wire paddle_gfx = (vcell == 46) && (paddle_rel_x < PADDLE_WIDTH);
 
 	wire ball_static_pixel_collide = static_collidable_gfx & ball_gfx;
 
@@ -1034,7 +1039,7 @@ module my_ball_paddle_top(
 		endcase
 	end
 
-	wire r = ball_gfx;
+	wire r = ball_gfx | paddle_gfx;
 	wire g = static_collidable_gfx;
 	wire b = grid_gfx;
 	wire [2:0] rgb = {b,g,r};
