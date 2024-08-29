@@ -1001,6 +1001,7 @@ module my_ball_paddle_top(
 			should_sample_on_hsync <= 1;
 		end
 	end
+	localparam BALL_SIZE = 6;
 
 	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
 	wire lr_border = hcell == 0 || hcell == 63;
