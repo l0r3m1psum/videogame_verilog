@@ -779,26 +779,23 @@ module ball_paddle_top(
 
 	wire paddle_gfx = (vcell == 28) && (paddle_rel_x < PADDLE_WIDTH);
 
-	wire [9:0] ball_rel_x = (hpos - ball_x);
-	wire [9:0] ball_rel_y = (vpos - ball_y);
+	wire [9:0] ball_rel_x = hpos - ball_x;
+	wire [9:0] ball_rel_y = vpos - ball_y;
 
 	wire ball_gfx = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
 
 	reg static_collidable_gfx; // main graphics signal (bricks and borders)
 	reg brick_present;
 	reg [6:0] brick_index;
-	wire brick_gfx = lr_border || (brick_present && vpos[2:0] != 0 && hpos[3:1] != 4);
+	wire brick_gfx = lr_border || brick_present && vpos[2:0] != 0 && hpos[3:1] != 4;
 
 	// scan bricks: compute brick_index and brick_present flag
 	always @(posedge clk_25mhz)
 		// see if we are scanning brick area
 		if (vpos[8:6] == 1 && !lr_border) begin
-			// every 16th pixel, starting at 8
-			if (hpos[3:0] == 8) begin
+			if (hpos[3:0] == 8) begin // every 16th pixel, starting at 8
 				brick_index <= {vpos[5:3], hpos[7:4]};
-			end
-			// every 17th pixel
-			else if (hpos[3:0] == 9) begin
+			end else if (hpos[3:0] == 9) begin // every 17th pixel
 				brick_present <= !brick_array[brick_index];
 			end
 		end else begin
@@ -816,7 +813,6 @@ module ball_paddle_top(
 
 	// compute ball collisions with paddle and playfield
 	always @(posedge clk_25mhz)
-		// clear all collide bits for frame
 		if (vsync) begin
 			ball_collide_bits <= 0;
 			ball_collide_paddle <= 0;
