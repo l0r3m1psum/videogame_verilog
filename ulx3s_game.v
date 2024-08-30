@@ -721,8 +721,6 @@ endmodule
 
 // TODO: aggiustare dimensioni della grafica per far si che usino bene lo
 // schermo.
-// TODO: usare i numeri in virgola fissa per rendere il movimento del cosetto
-// accettabile.
 module ball_paddle_top(
 	input clk_25mhz,
 	input [6:0] btn,
@@ -738,76 +736,57 @@ module ball_paddle_top(
 	wire [9:0] hpos, vpos;
 	hvsync_generator_hdmi hvsync_gen(clk_25mhz, 1'b0, hsync, vsync, display_on, hpos, vpos);
 
-	localparam BRICKS_H = 16; // # of bricks across
-	localparam BRICKS_V = 8;  // # of bricks down
+	localparam BRICKS_H = 16, BRICKS_V = 8;
 
-	localparam BALL_DIR_LEFT = 0;
-	localparam BALL_DIR_RIGHT = 1;
-	localparam BALL_DIR_DOWN = 1;
-	localparam BALL_DIR_UP = 0;
+	localparam BALL_DIR_LEFT = 0, BALL_DIR_RIGHT = 1;
+	localparam BALL_DIR_UP = 0, BALL_DIR_DOWN = 1;
 
-	localparam PADDLE_WIDTH = 31; // horizontal paddle size
-	localparam BALL_SIZE = 6;     // square ball size
+	localparam PADDLE_WIDTH = 31;
+	localparam BALL_SIZE = 6;
 
-	reg [9:0] paddle_pos = 0; // paddle X position
+	reg [9:0] paddle_x = 0;
 
-	reg [9:0] ball_x; // ball X position
-	reg [9:0] ball_y; // ball Y position
+	reg [9:0] ball_x, ball_y;
 	reg ball_dir_x;   // ball X direction (0=left, 1=right)
 	reg ball_speed_x; // ball speed (0=1 pixel/frame, 1=2 pixels/frame)
 	reg ball_dir_y;   // ball Y direction (0=up, 1=down)
 
 	// reg brick_array [0:BRICKS_H*BRICKS_V-1] = 0; // 16*8 = 128 bits
+	// active-low
 	reg [0:BRICKS_H*BRICKS_V-1] brick_array = 0; // 16*8 = 128 bits
 
-	wire [3:0] score0; // score right digit
-	wire [3:0] score1; // score left digit
-	wire [3:0] lives;  // # lives remaining
-	reg incscore;      // incscore signal
+	wire [3:0] score0, score1, lives;
+	reg incscore;
 	reg declives = 0;  // TODO
 
 	wire score_gfx;
 	player_stats stats(
 		.reset(reset),
-		.score0(score0),
-		.score1(score1),
-		.incscore(incscore),
-		.lives(lives),
-		.declives(declives)
+		.score0(score0), .score1(score1), .lives(lives),
+		.incscore(incscore), .declives(declives)
 	);
 	scoreboard_generator score_gen(
-		.score0(score0),
-		.score1(score1),
-		.lives(lives),
-		.vpos(vpos),
-		.hpos(hpos),
+		.score0(score0), .score1(score1), .lives(lives),
+		.vpos(vpos), .hpos(hpos),
 		.board_gfx(score_gfx)
 	);
 
-	wire [5:0] hcell = hpos[8:3];           // horizontal brick index
-	wire [5:0] vcell = vpos[8:3];           // vertical brick index
-	// 256x240
-	// 9'd255 == 9'b011111111
-	//              ++++++
-	wire lr_border = hcell==0 || hcell==31; // along horizontal border?
+	wire [5:0] hcell = hpos[8:3], vcell = vpos[8:3];
+	wire lr_border = hcell==0 || hcell==31;
 
 	// TODO: unsigned compare doesn't work in JS
-	wire [9:0] paddle_rel_x = ((hpos-paddle_pos) & 9'h1ff);
+	wire [9:0] paddle_rel_x = ((hpos-paddle_x) & 9'h1ff);
 
-	// player paddle graphics signal
 	wire paddle_gfx = (vcell == 28) && (paddle_rel_x < PADDLE_WIDTH);
 
-	// difference between ball position and video beam
 	wire [9:0] ball_rel_x = (hpos - ball_x);
 	wire [9:0] ball_rel_y = (vpos - ball_y);
 
-	// ball graphics signal
 	wire ball_gfx = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
 
-	reg static_collidable_gfx;    // main graphics signal (bricks and borders)
-	reg brick_present;     // 1 when we are drawing a brick
-	reg [6:0] brick_index; // index into array of current brick
-	// brick graphics signal
+	reg static_collidable_gfx; // main graphics signal (bricks and borders)
+	reg brick_present;
+	reg [6:0] brick_index;
 	wire brick_gfx = lr_border || (brick_present && vpos[2:0] != 0 && hpos[3:1] != 4);
 
 	// scan bricks: compute brick_index and brick_present flag
@@ -816,30 +795,21 @@ module ball_paddle_top(
 		if (vpos[8:6] == 1 && !lr_border) begin
 			// every 16th pixel, starting at 8
 			if (hpos[3:0] == 8) begin
-				// compute brick index
 				brick_index <= {vpos[5:3], hpos[7:4]};
 			end
 			// every 17th pixel
 			else if (hpos[3:0] == 9) begin
-				// load brick bit from array
 				brick_present <= !brick_array[brick_index];
 			end
 		end else begin
 			brick_present <= 0;
 		end
 
-	// only works when paddle at bottom of screen!
-	// (we don't want to mess w/ paddle position during visible portion)
-/*
-	always @(posedge hsync)
-		if (!hpaddle) paddle_pos <= vpos;
-*/
-	// FIXME: this is way too fast and goes all over the place.
-	always @(posedge hsync)
-		     if (btn[5]) paddle_pos <= paddle_pos - 1;
-		else if (btn[6]) paddle_pos <= paddle_pos + 1;
+	// TODO: use a divider with hsync signal instead.
+	always @(posedge vsync)
+		     if (btn[5]) paddle_x <= paddle_x - 1;
+		else if (btn[6]) paddle_x <= paddle_x + 1;
 
-	// 1 when ball signal intersects main (brick + border) signal
 	wire ball_static_pixel_collide = static_collidable_gfx & ball_gfx;
 
 	reg ball_collide_paddle = 0;
@@ -873,7 +843,7 @@ module ball_paddle_top(
 		end
 
 	// computes position of ball in relation to center of paddle
-	wire signed [9:0] ball_paddle_dx = ball_x - paddle_pos + 8;
+	wire signed [9:0] ball_paddle_dx = ball_x - paddle_x + 8;
 
 	// ball bounce: determine new velocity/direction
 	always @(posedge vsync or posedge reset) begin
@@ -928,7 +898,7 @@ module ball_paddle_top(
 		end
 	end
 
-	always @(*) begin
+	always @* begin
 		case (vcell)
 			0,1,2: static_collidable_gfx = score_gfx; // scoreboard
 			3: static_collidable_gfx = 0;
@@ -941,21 +911,50 @@ module ball_paddle_top(
 	end
 
 	wire grid_gfx = (((hpos&7)==0) || ((vpos&7)==0));
-	wire r = display_on && (ball_gfx | paddle_gfx);
-	wire g = display_on && (static_collidable_gfx | ball_gfx);
-	wire b = display_on && (grid_gfx | ball_gfx | brick_present);
-	wire [2:0] rgb = {b,g,r};
+	wire r = ball_gfx | paddle_gfx;
+	wire g = static_collidable_gfx | ball_gfx;
+	wire b = grid_gfx | ball_gfx | brick_present;
+	wire [2:0] rgb = {3{display_on}} & {b,g,r};
 
 	hdmi out(
 		.pixclk(clk_25mhz),
-		.hSync(hsync),
-		.vSync(vsync),
+		.hSync(hsync), .vSync(vsync),
 		.DrawArea(display_on),
 		.rgb(rgb),
-		.TMDS(gpdi_dp[2:0]),
-		.TMDS_clock(gpdi_dp[3])
+		.TMDS(gpdi_dp[2:0]), .TMDS_clock(gpdi_dp[3])
 	);
 endmodule
+
+`ifndef SYNTHESIS
+module ball_paddle_top_tb;
+	reg clk = 0, rst = 0;
+	always #10 clk = ~clk;
+
+	wire [3:0] gpdi_dp;
+	wire ignore;
+	ball_paddle_top dut(
+		.clk_25mhz(clk),
+		.btn({6'b000000, ~rst}),
+		.gpdi_dp(gpdi_dp),
+		.wifi_gpio0(ignore)
+	);
+
+	initial begin
+		$dumpfile("ball_paddle_top_tb.vcd");
+		$dumpvars(0, dut);
+		$dumpoff;
+		rst = 1;
+		@(posedge clk);
+		dut.ball_x = 240;
+		rst = 0;
+		$dumpon;
+		// This does not seem to terminate...
+		wait (dut.ball_static_pixel_collide);
+		repeat(800*525) @(posedge clk);
+		$finish();
+	end
+endmodule
+`endif
 
 module my_ball_paddle_top(
 	input clk_25mhz,
