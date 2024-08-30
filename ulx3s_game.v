@@ -997,8 +997,7 @@ module my_ball_paddle_top(
 	localparam BALL_SIZE = 6;
 	localparam PADDLE_WIDTH = 31;
 
-	localparam BRICKS_H = 16;
-	localparam BRICKS_V = 8;
+	localparam BRICKS_H = 16, BRICKS_V = 8;
 
 	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
 
@@ -1021,19 +1020,23 @@ module my_ball_paddle_top(
 	reg brick_present = 0;
 	reg [6:0] brick_index = 0;
 	wire brick_gfx = lr_border
-		|| (brick_present && vpos[2:0] != 0 && hpos[3:1] != 4);
-	/*
-		&& vpos_mod10 != 0  // don't draw over the vertical bars of the grid
-		&& hpos_mod10 != 4); // don't draw over every second horizontal bar
-	*/
+		|| brick_present
+		&& vpos_mod10 != 0  // don't draw over the horizontal bars of the grid
+		// TODO: make this in a smarter way
+		&& hpos % 20 != 0; // don't draw over every second vertical bar
 
 	// 2^6 == 64 <= vpos <= 127 == 2^7-1
-	wire brick_area = vpos[8:6] == 3'b001 && !lr_border;
+	// wire brick_area = vpos[8:6] == 3'b001 && !lr_border;
+	// NOTE: can this be done in a smarter way?
+	wire brick_area = (8 <= vcell && vcell <= 15) && !lr_border;
 	always @(posedge clk_25mhz)
 		if (brick_area) begin
 			// every 16th pixel, starting at 8 i.e. every two cells of the grid
 			if      (hpos[3:0] == 4'b1000 /*8*/)
-				brick_index <= {vpos[5:3], hpos[7:4]};
+				brick_index <= {
+					vpos[5:3], // 5,4,3   -> 2**3 = 8
+					hpos[7:4]  // 7,6,5,4 -> 2**4 = 16
+				};
 			else if (hpos[3:0] == 4'b1001 /*9*/) // every 17th pixel
 				brick_present <= !brick_array[brick_index];
 		end else
