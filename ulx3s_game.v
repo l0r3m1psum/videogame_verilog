@@ -698,7 +698,7 @@ module scoreboard_generator(
 );
 
 	reg [3:0] score_digit;
-	reg [4:0] score_bits;
+	wire [4:0] score_bits;
 
 	always @(*) begin
 		case (hpos[7:5])
