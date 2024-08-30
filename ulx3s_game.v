@@ -805,8 +805,7 @@ module ball_paddle_top(
 			brick_present <= 0;
 		end
 
-	// TODO: use a divider with hsync signal instead.
-	always @(posedge vsync)
+	always @(posedge vsync) // TODO: use a divider with hsync signal instead.
 		     if (btn[5]) paddle_x <= paddle_x - 1;
 		else if (btn[6]) paddle_x <= paddle_x + 1;
 
@@ -900,13 +899,13 @@ module ball_paddle_top(
 
 	always @* begin
 		case (vcell)
-			0,1,2: static_collidable_gfx = score_gfx; // scoreboard
+			0,1,2: static_collidable_gfx = score_gfx;
 			3: static_collidable_gfx = 0;
 			4: static_collidable_gfx = 1; // top border
-			8,9,10,11,12,13,14,15: static_collidable_gfx = brick_gfx; // brick rows 1-8
-			28: static_collidable_gfx = paddle_gfx | lr_border; // paddle
+			8,9,10,11,12,13,14,15: static_collidable_gfx = brick_gfx;
+			28: static_collidable_gfx = paddle_gfx | lr_border;
 			29: static_collidable_gfx = hpos[0] ^ vpos[0]; // bottom border
-			default: static_collidable_gfx = lr_border; // left/right borders
+			default: static_collidable_gfx = lr_border;
 		endcase
 	end
 
@@ -917,10 +916,8 @@ module ball_paddle_top(
 	wire [2:0] rgb = {3{display_on}} & {b,g,r};
 
 	hdmi out(
-		.pixclk(clk_25mhz),
-		.hSync(hsync), .vSync(vsync),
-		.DrawArea(display_on),
-		.rgb(rgb),
+		.pixclk(clk_25mhz), .hSync(hsync), .vSync(vsync),
+		.DrawArea(display_on), .rgb(rgb),
 		.TMDS(gpdi_dp[2:0]), .TMDS_clock(gpdi_dp[3])
 	);
 endmodule
@@ -948,6 +945,7 @@ module ball_paddle_top_tb;
 		dut.ball_x = 240;
 		rst = 0;
 		$dumpon;
+		// https://www.chipverify.com/verilog/verilog-delay-control
 		// This does not seem to terminate...
 		wait (dut.ball_static_pixel_collide);
 		repeat(800*525) @(posedge clk);
