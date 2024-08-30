@@ -1001,6 +1001,9 @@ module my_ball_paddle_top(
 	localparam BALL_SIZE = 6;
 	localparam PADDLE_WIDTH = 31;
 
+	localparam BRICKS_H = 16;
+	localparam BRICKS_V = 8;
+
 	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
 
 	wire lr_border = hcell == 0 || hcell == 63;
@@ -1016,29 +1019,55 @@ module my_ball_paddle_top(
 	wire [9:0] ball_rel_y   = vpos - ball_y;
 	wire [9:0] paddle_rel_x = hpos - paddle_x;
 
+	// active-low
+	reg [0:BRICKS_H*BRICKS_V-1] brick_array = 0; // 16*8 = 128 bits
+
+	reg brick_present = 0;
+	reg [6:0] brick_index = 0;
+	wire brick_gfx = lr_border
+		|| (brick_present && vpos[2:0] != 0 && hpos[3:1] != 4);
+	/*
+		&& vpos_mod10 != 0  // don't draw over the vertical bars of the grid
+		&& hpos_mod10 != 4); // don't draw over every second horizontal bar
+	*/
+
+	// 2^6 == 64 <= vpos <= 127 == 2^7-1
+	wire brick_area = vpos[8:6] == 3'b001 && !lr_border;
+	always @(posedge clk_25mhz)
+		if (brick_area) begin
+			// every 16th pixel, starting at 8 i.e. every two cells of the grid
+			if      (hpos[3:0] == 4'b1000 /*8*/)
+				brick_index <= {vpos[5:3], hpos[7:4]};
+			else if (hpos[3:0] == 4'b1001 /*9*/) // every 17th pixel
+				brick_present <= !brick_array[brick_index];
+		end else
+			brick_present <= 0;
+
 	wire ball_gfx   = ball_rel_x < BALL_SIZE && ball_rel_y < BALL_SIZE;
 	wire paddle_gfx = (vcell == 46) && (paddle_rel_x < PADDLE_WIDTH);
 
-	wire ball_static_pixel_collide = static_collidable_gfx & ball_gfx;
-
 	reg static_collidable_gfx = 0;
-	always @(*) begin
+	wire score_gfx = 0;
+	wire bottom_border_gfx = hpos[0] ^ vpos[0];
+	always @* begin
 		case (vcell)
-			0,1,2: static_collidable_gfx = 0;
+			0,1,2: static_collidable_gfx = score_gfx;
 			3: static_collidable_gfx = 0;
 			4: static_collidable_gfx = 1; // top border
 			// 5,6,7:
-			8,9,10,11,12,13,14,15: static_collidable_gfx = 0 | lr_border; // brick rows 1-8
-			// 16,17,18,19,20,21,22,23,24,25,26,27
-			28: static_collidable_gfx = 0 | lr_border;
-			47: static_collidable_gfx = hpos[0] ^ vpos[0]; // bottom border
-			default: static_collidable_gfx = lr_border; // left/right borders
+			8,9,10,11,12,13,14,15: static_collidable_gfx = brick_gfx;
+			// 16,17,18,19,20,21,22,23,24,25,26,27:
+			28: static_collidable_gfx = paddle_gfx | lr_border;
+			47: static_collidable_gfx = bottom_border_gfx;
+			default: static_collidable_gfx = lr_border;
 		endcase
 	end
 
+	wire ball_static_pixel_collide = static_collidable_gfx & ball_gfx;
+
 	wire r = ball_gfx | paddle_gfx;
-	wire g = static_collidable_gfx;
-	wire b = grid_gfx;
+	wire g = static_collidable_gfx | ball_gfx;
+	wire b = grid_gfx | ball_gfx | brick_present;
 	wire [2:0] rgb = {b,g,r};
 
 	hdmi out(
