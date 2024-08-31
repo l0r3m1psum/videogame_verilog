@@ -751,9 +751,8 @@ module ball_paddle_top(
 	reg ball_speed_x; // ball speed (0=1 pixel/frame, 1=2 pixels/frame)
 	reg ball_dir_y;   // ball Y direction (0=up, 1=down)
 
-	// reg brick_array [0:BRICKS_H*BRICKS_V-1] = 0; // 16*8 = 128 bits
-	// active-low
-	reg [0:BRICKS_H*BRICKS_V-1] brick_array = 0; // 16*8 = 128 bits
+	// reg brick_destroyed [0:BRICKS_H*BRICKS_V-1] = 0; // 16*8 = 128 bits
+	reg [0:BRICKS_H*BRICKS_V-1] brick_destroyed = 0; // 16*8 = 128 bits
 
 	wire [3:0] score0, score1, lives;
 	reg incscore;
@@ -796,7 +795,7 @@ module ball_paddle_top(
 			if (hpos[3:0] == 8) begin // every 16th pixel, starting at 8
 				brick_index <= {vpos[5:3], hpos[7:4]};
 			end else if (hpos[3:0] == 9) begin // every 17th pixel
-				brick_present <= !brick_array[brick_index];
+				brick_present <= !brick_destroyed[brick_index];
 			end
 		end else begin
 			brick_present <= 0;
@@ -831,7 +830,7 @@ module ball_paddle_top(
 	// compute ball collisions with brick and increment score
 	always @(posedge clk_25mhz)
 		if (ball_static_pixel_collide && brick_present) begin
-			brick_array[brick_index] <= 1;
+			brick_destroyed[brick_index] <= 1;
 			incscore <= 1; // increment score
 		end else begin
 			incscore <= 0; // reset incscore
@@ -997,7 +996,7 @@ module my_ball_paddle_top(
 	localparam BALL_SIZE = 6;
 	localparam PADDLE_WIDTH = 31;
 
-	localparam BRICKS_H = 16, BRICKS_V = 8;
+	localparam BRICKS_H = 30, BRICKS_V = 8;
 
 	wire [5:0] hcell = hpos_div10, vcell = vpos_div10;
 
@@ -1014,31 +1013,33 @@ module my_ball_paddle_top(
 	wire [9:0] ball_rel_y   = vpos - ball_y;
 	wire [9:0] paddle_rel_x = hpos - paddle_x;
 
-	// active-low
-	reg [0:BRICKS_H*BRICKS_V-1] brick_array = 0; // 16*8 = 128 bits
+	reg [BRICKS_H*BRICKS_V-1:0] brick_destroyed = 0; // 240bit
+	initial begin
+		brick_destroyed[30] = 1;
+		brick_destroyed[1] = 1;
+		brick_destroyed[239] = 1;
+	end
+
+	wire [5:0] hpos_mod20 = hpos % 20; // TODO: make this in a smarter way
+	wire [5:0] hpos_div20 = hpos / 20; // TODO: make this in a smarter way
 
 	reg brick_present = 0;
-	reg [6:0] brick_index = 0;
-	wire brick_gfx = lr_border
-		|| brick_present
+	reg [7:0] brick_index = 0; // 255
+	wire brick_gfx = brick_present
 		&& vpos_mod10 != 0  // don't draw over the horizontal bars of the grid
-		// TODO: make this in a smarter way
-		&& hpos % 20 != 0; // don't draw over every second vertical bar
+		&& hpos_mod20 != 0; // don't draw over every second vertical bar
 
 	// 2^6 == 64 <= vpos <= 127 == 2^7-1
 	// wire brick_area = vpos[8:6] == 3'b001 && !lr_border;
 	// NOTE: can this be done in a smarter way?
-	wire brick_area = (8 <= vcell && vcell <= 15) && !lr_border;
+	wire brick_area = (8 <= vcell && vcell <= 15) && (2 <= hcell && hcell <= 61);
 	always @(posedge clk_25mhz)
 		if (brick_area) begin
-			// every 16th pixel, starting at 8 i.e. every two cells of the grid
-			if      (hpos[3:0] == 4'b1000 /*8*/)
-				brick_index <= {
-					vpos[5:3], // 5,4,3   -> 2**3 = 8
-					hpos[7:4]  // 7,6,5,4 -> 2**4 = 16
-				};
-			else if (hpos[3:0] == 4'b1001 /*9*/) // every 17th pixel
-				brick_present <= !brick_array[brick_index];
+			// FIXME: this is off by one pixel for some reason...
+			if (hpos_mod20 == 0)
+				brick_index <= (vpos_div10 - 8)*BRICKS_H + (hpos_div20 - 1);
+			else if (hpos_mod20 == 1)
+				brick_present <= !brick_destroyed[brick_index];
 		end else
 			brick_present <= 0;
 
@@ -1054,7 +1055,7 @@ module my_ball_paddle_top(
 			3: static_collidable_gfx = 0;
 			4: static_collidable_gfx = 1; // top border
 			// 5,6,7:
-			8,9,10,11,12,13,14,15: static_collidable_gfx = brick_gfx;
+			8,9,10,11,12,13,14,15: static_collidable_gfx = brick_gfx | lr_border;
 			// 16,17,18,19,20,21,22,23,24,25,26,27:
 			28: static_collidable_gfx = paddle_gfx | lr_border;
 			47: static_collidable_gfx = bottom_border_gfx;
