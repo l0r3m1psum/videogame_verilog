@@ -68,7 +68,7 @@
 
         NSInteger tag = 0;
         for (AVCaptureDevice *device in self.discoverySession.devices) {
-            NSString tagString = tag <= 9 ? [@(tag) stringValue] : @"";
+            NSString *tagString = tag <= 9 ? [@(tag) stringValue] : @"";
             NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:device.localizedName
                                                               action:@selector(deviceSelected:)
                                                        keyEquivalent:tagString];
